@@ -3,5 +3,10 @@
   "version": "0.0.1",
   "main": "index.js",
   "author": "windok.ua@gmail.com",
-  "license": "MIT"
+  "license": "MIT",
+  "type": "module",
+  "dependencies": {
+    "dotenv": "^8.2.0",
+    "node-fetch": "^2.6.1"
+  }
 }
