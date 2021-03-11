@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 
 import ThreeCommasAPI from './src/threeCommasAPI.js';
 import BotManager from './src/botManager.js';
+import { TOO_MANY_REQUESTS_ERROR } from './src/errors.js';
 
 dotenv.config();
 
@@ -16,34 +17,56 @@ dotenv.config();
   await botManager.loadAccounts();
   await botManager.loadMatchingFuturesPairs();
 
-  // update info
+  // todo log both in file and stdout
+  // todo change TP after 3,4,5 safety order
+
+  // update info every 6 hours
   setInterval(() => {
     botManager.loadAccounts();
     botManager.loadMatchingFuturesPairs();
-  }, 60 * 60 * 1000);
+  }, 6 * 60 * 60 * 1000);
 
-  setInterval(async () => {
+  const initialCheckDealsTimeout = Number.parseInt(process.env.CHECK_DEALS_TIMEOUT) * 1000;
+  const tooManyRequestTimeout = 60 * 60 * 1000;
+
+  let checkDealsTimeout = initialCheckDealsTimeout;
+
+  const checkBots = async () => {
     try {
-      console.log('*********');
-      console.log('*********');
-      console.log('*********');
-      console.log('*********');
-      console.log('*********');
-
       const {
-        bestPossibleDeal,
-        availableFuturesBots,
-      } = await botManager.checkActiveSpotDeals();
+        mainBot,
+        availableSlaveBots,
+        activeSlaveBots,
+      } = await botManager.loadBotInfo();
 
-      await botManager.startFutureBot(
-        availableFuturesBots[0],
-        bestPossibleDeal,
+      const bestPossibleDeals = await botManager.getBestPossibleDealsToCopy(
+        mainBot,
+        activeSlaveBots,
       );
+
+      await botManager.startFutureBots(
+        availableSlaveBots,
+        bestPossibleDeals,
+      );
+
+      checkDealsTimeout = initialCheckDealsTimeout;
     } catch (e) {
       console.error(e);
-    }
-  }, 30 * 1000);
 
+      if (e.message === TOO_MANY_REQUESTS_ERROR) {
+        checkDealsTimeout = tooManyRequestTimeout;
+      }
+    }
+  };
+
+  while (true) {
+    console.log('-----------------------------------------------------');
+    console.log(new Date());
+    console.log('-----------------------------------------------------');
+
+    await checkBots();
+    await new Promise(resolve => setTimeout(resolve, checkDealsTimeout));
+  }
 })().catch(e => {
   console.error(e);
 });

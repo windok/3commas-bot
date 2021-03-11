@@ -1,6 +1,7 @@
 import querystring from 'querystring';
 import crypto from 'crypto';
 import fetch from 'node-fetch';
+import { THREE_COMMAS_REQUEST_ERROR, TOO_MANY_REQUESTS_ERROR } from './errors.js';
 
 const API_URL = 'https://api.3commas.io';
 
@@ -39,11 +40,17 @@ class ThreeCommasAPI {
         },
       );
 
+      // console.log([...response.headers.entries()]);
+
       return await response.json();
     } catch (e) {
-      console.log(e);
+      console.error(e, e && e.response && e.response.data);
 
-      return false;
+      if (e.status === 429 || (e.response && e.response.status === 429)) {
+        throw new Error(TOO_MANY_REQUESTS_ERROR);
+      }
+
+      throw new Error(THREE_COMMAS_REQUEST_ERROR);
     }
   }
 
@@ -89,9 +96,9 @@ class ThreeCommasAPI {
     );
   }
 
-  changeBotPair(bot, newPairs) {
+  changeBotPair(bot, newPair) {
     return this.updateBot(bot.id, {
-      pairs: newPairs,
+      pairs: [newPair],
       name: bot.name,
       start_order_type: bot.start_order_type,
       max_active_deals: bot.max_active_deals,
