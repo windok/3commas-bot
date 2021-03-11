@@ -18,7 +18,6 @@ dotenv.config();
   await botManager.loadMatchingFuturesPairs();
 
   // todo log both in file and stdout
-  // todo change TP after 3,4,5 safety order
 
   // update info every 6 hours
   setInterval(() => {
@@ -48,6 +47,8 @@ dotenv.config();
         availableSlaveBots,
         bestPossibleDeals,
       );
+
+      await botManager.recalculateTakeProfits(activeSlaveBots);
 
       checkDealsTimeout = initialCheckDealsTimeout;
     } catch (e) {

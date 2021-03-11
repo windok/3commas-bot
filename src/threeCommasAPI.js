@@ -140,6 +140,14 @@ class ThreeCommasAPI {
     );
   }
 
+  updateDeal(dealId, dealData) {
+    return this.makeRequest(
+      'PATCH',
+      `/public/api/ver1/deals/${dealId}/update_deal?`,
+      dealData,
+    );
+  }
+
   ping() {
     return this.makeRequest(
       'GET',

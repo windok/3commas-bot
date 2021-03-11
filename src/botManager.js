@@ -13,6 +13,16 @@ class BotManager {
 
   _matchingFuturePairs;
 
+  _takeProfitsOnSafetyOrdersMap = new Map([
+    [0, '1.5'],
+    [1, '1.2'],
+    [2, '1.1'],
+    [3, '1.0'],
+    [4, '0.8'],
+    [5, '0.4'],
+    [6, '0.2'],
+  ]);
+
   /**
    *
    * @param {ThreeCommasAPI} apiClient
@@ -81,8 +91,8 @@ class BotManager {
     );
 
     console.log('Loaded bot info', {
-      mainBot: this.remapBot(mainBot),
-      slaveBots: slaveBots.map(this.remapBot),
+      mainBot: this.formatBotEntity(mainBot),
+      slaveBots: slaveBots.map(this.formatBotEntity),
     });
 
     return { mainBot, slaveBots, availableSlaveBots, activeSlaveBots };
@@ -129,14 +139,14 @@ class BotManager {
 
     console.log(
       'Possible Deals to copy',
-      possibleDealsToCopy.map(this.remapDeal),
+      JSON.stringify(possibleDealsToCopy.map(this.remapDeal)),
     );
 
     return possibleDealsToCopy;
   }
 
   async startFutureBots(availableFutureBots, bestPossibleDeals) {
-    if (!availableFutureBots.length) {
+    if (!availableFutureBots.length && bestPossibleDeals.length) {
       console.log('No available Futures bots to start');
     }
 
@@ -153,7 +163,7 @@ class BotManager {
           dealToCopy.pair,
         );
 
-        console.log('Changed bot', this.remapBot(bot));
+        console.log('Changed bot', this.formatBotEntity(bot));
       }
 
       await this._apiClient.startDealWithBot(
@@ -163,9 +173,59 @@ class BotManager {
 
       const result = await this._apiClient.getBotExtendedInfo(bot.id);
 
-      console.log('Started new futures bot', this.remapBot(result));
+      console.log('Started new futures bot', this.formatBotEntity(result));
     }));
   }
+
+  async recalculateTakeProfits(activeFuturesBots) {
+    return Promise.all(activeFuturesBots.map(async (bot) => {
+      return Promise.all((bot.active_deals || []).map(async (deal) => {
+        const requiredTakeProfit = this._takeProfitsOnSafetyOrdersMap.get(deal.completed_safety_orders_count);
+
+        if (
+          deal.completed_manual_safety_orders_count ||
+          !requiredTakeProfit ||
+          requiredTakeProfit === deal.take_profit
+        ) {
+          if (deal.completed_manual_safety_orders_count || !requiredTakeProfit) {
+            console.log(
+              'Something strange during TP recalculation',
+              { bot: this.formatBotEntity(bot), requiredTakeProfit },
+            );
+          }
+
+          return Promise.resolve(deal);
+        }
+
+        console.log('Changing take profit', {
+          bot: this.formatBotEntity(bot),
+          prevTP: deal.take_profit,
+          newTP: requiredTakeProfit,
+        });
+
+        const updatedDeal = await this._apiClient.updateDeal(deal.id, {
+          take_profit: requiredTakeProfit,
+          // take_profit_type: deal.take_profit_type,
+          // profit_currency: deal.profit_currency,
+          // trailing_enabled: deal.trailing_enabled,
+          // trailing_deviation: deal.trailing_deviation,
+          // stop_loss_percentage: Number.parseFloat(deal.stop_loss_percentage),
+          // max_safety_orders: deal.max_safety_orders,
+          // active_safety_orders_count: deal.active_safety_orders_count,
+          // stop_loss_timeout_enabled: deal.stop_loss_timeout_enabled,
+          // stop_loss_timeout_in_seconds: deal.stop_loss_timeout_in_seconds,
+          // tsl_enabled: deal.tsl_enabled,
+          // stop_loss_type: deal.stop_loss_type,
+        });
+
+        console.log('Changed take profit', JSON.stringify(this.remapDeal(updatedDeal)));
+
+        return updatedDeal;
+      }));
+    }));
+  }
+
+  formatBotEntity = (bot) => JSON.stringify(this.remapBot(bot));
 
   remapBot = ({
     id,
@@ -173,14 +233,13 @@ class BotManager {
     is_enabled,
     active_deals_count,
     active_deals,
-  }) => JSON.stringify(
-    {
-      id: id,
-      pairs: pairs,
-      isEnabled: is_enabled,
-      activeDealsCount: active_deals_count,
-      activeDeals: active_deals && active_deals.map(this.remapDeal),
-    });
+  }) => ({
+    id: id,
+    pairs: pairs,
+    isEnabled: is_enabled,
+    activeDealsCount: active_deals_count,
+    activeDeals: active_deals && active_deals.map(this.remapDeal),
+  });
 
   remapDeal = ({
     id,
@@ -201,7 +260,7 @@ class BotManager {
     takeProfitPercentage: take_profit,
     boughtPrice: bought_average_price,
     currentPrice: current_price,
-    takeProfitPrice: take_profit_price
+    takeProfitPrice: take_profit_price,
   });
 
 }

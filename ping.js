@@ -13,7 +13,8 @@ dotenv.config();
   });
   const botManager = new BotManager(apiClient);
 
-  console.log(JSON.stringify(await botManager.loadBotInfo()));
+  const { activeSlaveBots } = await botManager.loadBotInfo();
+  await botManager.recalculateTakeProfits(activeSlaveBots);
 
   console.log(await apiClient.ping());
   console.log(await apiClient.time());
