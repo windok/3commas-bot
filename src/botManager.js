@@ -14,13 +14,13 @@ class BotManager {
   _matchingFuturePairs;
 
   _takeProfitsOnSafetyOrdersMap = new Map([
-    [0, '1.5'],
-    [1, '1.2'],
+    [0, '1.1'],
+    [1, '1.1'],
     [2, '1.1'],
-    [3, '1.0'],
-    [4, '0.8'],
-    [5, '0.4'],
-    [6, '0.2'],
+    [3, '1.1'],
+    [4, '1.0'],
+    [5, '0.8'],
+    [6, '0.4'],
   ]);
 
   /**
@@ -102,11 +102,11 @@ class BotManager {
     if (!mainBot || !mainBot.active_deals.length) {
       console.log('No active deals to init Futures bot');
 
-      return [];
+      return { notStartedDeals: [], startedDeals: [] };
     }
 
     const startedDealPairs = activeSlaveBots.reduce(
-      (pairs, bot) => [...pairs, ...bot.active_deals.map(({ pair }) => pair)],
+      (pairs, bot) => [...pairs, ...bot.active_deals.map(this.getDealPair)],
       [],
     );
     console.log('Started Futures deals', startedDealPairs);
@@ -114,35 +114,44 @@ class BotManager {
     const possibleDealsToCopy = mainBot.active_deals.filter(d => {
       const activeTime = (new Date().getTime() -
         new Date(d.created_at).getTime());
-      const profitPercentage = Number.parseFloat(d.actual_profit_percentage);
 
       return (
         this._matchingFuturePairs.includes(d.pair) && // available for both Spot and Futures trading
         activeTime < 4 * 60 * 60 * 1000 && // active less than 4 hours
-        !startedDealPairs.includes(d.pair) && // no futures bots already launched with this pair
         // d.completed_safety_orders_count >= 5 && // maybe risky
-        profitPercentage < -0.3 && // has potential for growth according to initial signal
+        this.isPercentageGreater('-0.4', d.actual_profit_percentage) && // has potential for growth according to initial signal
         // other checks
         !d.deal_has_error &&
         !d.closed_at
       );
-    }).sort((dealA, dealB) => { // todo check sorting
-      return dealA.completed_safety_orders_count >
-      dealB.completed_safety_orders_count
-        ? 1
+    }).sort((dealA, dealB) => {
+      return dealA.completed_safety_orders_count > dealB.completed_safety_orders_count
+        ? -1
         : (
-          dealA.completed_safety_orders_count ===
-          dealB.completed_safety_orders_count &&
-          dealA.profitPercentage < dealB.profitPercentage
-        ) ? 1 : -1;
+          dealA.completed_safety_orders_count === dealB.completed_safety_orders_count &&
+          this.isPercentageGreater(dealB.actual_profit_percentage, dealA.actual_profit_percentage)
+        ) ? -1 : 1;
     });
+
+    const notStartedDeals = possibleDealsToCopy.filter(
+      ({ pair }) => !startedDealPairs.includes(pair),
+    );
+    const startedDeals = possibleDealsToCopy.filter(
+      ({ pair }) => startedDealPairs.includes(pair),
+    );
 
     console.log(
       'Possible Deals to copy',
-      JSON.stringify(possibleDealsToCopy.map(this.remapDeal)),
+      JSON.stringify({
+          possibleNotStarted: notStartedDeals.map(this.getDealPair),
+          possibleStarted: startedDeals.map(this.getDealPair),
+          all: mainBot.active_deals.map(this.getDealPair),
+          possibleDealsToCopy: possibleDealsToCopy.map(this.remapDeal),
+        },
+      ),
     );
 
-    return possibleDealsToCopy;
+    return { notStartedDeals, startedDeals };
   }
 
   async startFutureBots(availableFutureBots, bestPossibleDeals) {
@@ -177,31 +186,75 @@ class BotManager {
     }));
   }
 
+  async finishProfitableFuturesBots(activeFuturesBots, availableSlaveBots, alreadyStartedPairs = [], newPossiblePairs = []) {
+    const isFinished = (await Promise.all(activeFuturesBots.map(async (bot) => {
+      return (await Promise.all((bot.active_deals || []).map(async (deal) => {
+        if (
+          this.isPercentageGreater(deal.actual_profit_percentage, '0.5') &&
+          this.isPercentageGreater(deal.take_profit, deal.actual_profit_percentage) &&
+          (
+            alreadyStartedPairs.includes(deal.pair) || // take profit and restrart bot with the same pair
+            (!availableSlaveBots.length && newPossiblePairs.length) // all bots are taken, but there is some new possible deal
+          )
+        ) {
+          console.log('Changing TP to start new bot with new pair and close deal ASAP', JSON.stringify({
+            bot: this.remapBot(bot),
+            prevTP: deal.take_profit,
+            actualTP: deal.actual_profit_percentage,
+            newTP: '0.5',
+          }));
+
+          const updatedDeal = await this._apiClient.updateDeal(deal.id, {
+            take_profit: '0.5',
+          });
+
+          // remove one possible deal to not finish started bot deals more than needed
+          newPossiblePairs.shift();
+
+          console.log('Changed TP to close deal ASAP', JSON.stringify(this.remapDeal(updatedDeal)));
+
+          return true;
+        }
+
+        return false;
+      }))).some(Boolean);
+    }))).some(Boolean);
+
+    console.log('Finishing profitable futures bots result', String(isFinished).toUpperCase());
+
+    return isFinished;
+  }
+
   async recalculateTakeProfits(activeFuturesBots) {
     return Promise.all(activeFuturesBots.map(async (bot) => {
       return Promise.all((bot.active_deals || []).map(async (deal) => {
         const requiredTakeProfit = this._takeProfitsOnSafetyOrdersMap.get(deal.completed_safety_orders_count);
 
-        if (
+        const noNeedToChangeTP = (
           deal.completed_manual_safety_orders_count ||
           !requiredTakeProfit ||
-          requiredTakeProfit === deal.take_profit
-        ) {
-          if (deal.completed_manual_safety_orders_count || !requiredTakeProfit) {
+          this.isPercentageGreater(requiredTakeProfit, deal.take_profit)
+        );
+        const alreadySetCorrectTP = requiredTakeProfit === deal.take_profit;
+
+        if (noNeedToChangeTP || alreadySetCorrectTP) {
+          if (
+            noNeedToChangeTP
+          ) {
             console.log(
               'Something strange during TP recalculation',
-              { bot: this.formatBotEntity(bot), requiredTakeProfit },
+              JSON.stringify({ bot: this.remapBot(bot), requiredTakeProfit }),
             );
           }
 
-          return Promise.resolve(deal);
+          return deal;
         }
 
-        console.log('Changing take profit', {
-          bot: this.formatBotEntity(bot),
+        console.log('Changing TP', JSON.stringify({
+          bot: this.remapBot(bot),
           prevTP: deal.take_profit,
           newTP: requiredTakeProfit,
-        });
+        }));
 
         const updatedDeal = await this._apiClient.updateDeal(deal.id, {
           take_profit: requiredTakeProfit,
@@ -224,6 +277,10 @@ class BotManager {
       }));
     }));
   }
+
+  isPercentageGreater = (percentageA, percentageB) => {
+    return Math.round(Number.parseFloat(percentageA) * 100) > Math.round(Number.parseFloat(percentageB) * 100);
+  };
 
   formatBotEntity = (bot) => JSON.stringify(this.remapBot(bot));
 
@@ -262,6 +319,8 @@ class BotManager {
     currentPrice: current_price,
     takeProfitPrice: take_profit_price,
   });
+
+  getDealPair = ({ pair }) => pair;
 
 }
 

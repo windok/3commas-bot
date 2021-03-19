@@ -17,7 +17,8 @@ dotenv.config();
   await botManager.loadAccounts();
   await botManager.loadMatchingFuturesPairs();
 
-  // todo log both in file and stdout
+  // todo log both in file and stdout, log with time
+  // todo move to cloud
 
   // update info every 6 hours
   setInterval(() => {
@@ -32,23 +33,34 @@ dotenv.config();
 
   const checkBots = async () => {
     try {
-      const {
+      let {
         mainBot,
         availableSlaveBots,
         activeSlaveBots,
       } = await botManager.loadBotInfo();
 
-      const bestPossibleDeals = await botManager.getBestPossibleDealsToCopy(
+      const { notStartedDeals, startedDeals } = await botManager.getBestPossibleDealsToCopy(
         mainBot,
         activeSlaveBots,
       );
 
-      await botManager.startFutureBots(
+      const isFinished = await botManager.finishProfitableFuturesBots(
+        activeSlaveBots,
         availableSlaveBots,
-        bestPossibleDeals,
+        startedDeals.map(({ pair }) => pair),
+        notStartedDeals.map(({ pair }) => pair),
       );
+      if (isFinished) {
+        const updatedBotInfo = await botManager.loadBotInfo();
 
-      await botManager.recalculateTakeProfits(activeSlaveBots);
+        availableSlaveBots = updatedBotInfo.availableSlaveBots;
+        activeSlaveBots = updatedBotInfo.activeSlaveBots;
+      }
+
+      await Promise.all([
+        botManager.recalculateTakeProfits(activeSlaveBots),
+        botManager.startFutureBots(availableSlaveBots, notStartedDeals),
+      ]);
 
       checkDealsTimeout = initialCheckDealsTimeout;
     } catch (e) {
