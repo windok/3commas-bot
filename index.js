@@ -1,11 +1,25 @@
 #!/usr/local/bin/node
 import dotenv from 'dotenv';
+import http from 'http';
 
 import ThreeCommasAPI from './src/threeCommasAPI.js';
 import BotManager from './src/botManager.js';
 import { TOO_MANY_REQUESTS_ERROR } from './src/errors.js';
 
 dotenv.config();
+
+// todo sanitize webhook payload
+// todo futures signals without spot->futures transferring
+// todo open short positions
+// todo log both in file and stdout, log with time
+// optional todo when starting futures deal check that there are no active positions even for bots that are not configured in env
+// todo move to docker
+// todo move to cloud
+// todo get rid of 3commas
+// todo web configuration
+// todo telegram logging
+// optional todo google spreadsheet statistics
+// todo hedge mode for the pair with both long and short positions
 
 (async () => {
   const apiClient = new ThreeCommasAPI({
@@ -17,17 +31,58 @@ dotenv.config();
   await botManager.loadAccounts();
   await botManager.loadMatchingFuturesPairs();
 
-  // todo log both in file and stdout, log with time
-  // todo move to cloud
+  const hostname = '127.0.0.1';
+  const port = process.env.PORT;
 
-  // update info every 6 hours
-  setInterval(() => {
-    botManager.loadAccounts();
-    botManager.loadMatchingFuturesPairs();
-  }, 6 * 60 * 60 * 1000);
+  const server = http.createServer((req, res) => {
+    var body = '';
+    req.on('data', function (chunk) {
+      body += chunk;
+    });
+
+    req.on('end', function () {
+      body = body.replace(/\n/gmi, '');
+      body = body.replace(/\s+/gmi, ' ');
+
+      let payload;
+      try {
+        payload = JSON.parse(body);
+      } catch (e) {
+        console.log(new Date(), 'Failed to parse body', body, e);
+      }
+
+      if (
+        !payload.price ||
+        !payload.pair ||
+        !payload.time ||
+        payload.token !== process.env.SIGNAL_SAFETY_TOKEN
+      ) {
+        console.log(new Date(), 'Incorrect payload format', body);
+      } else if (new Date().getTime() - new Date(payload.time).getTime() > 3 * 60 * 1000) {
+        console.log(new Date(), 'Signal is outdated', body);
+      } else {
+        console.log(new Date(), 'Received payload', body);
+
+        (async () => {
+          try {
+            await botManager.startSignalDeal(payload)
+          } catch (e) {
+            console.log(new Date(), 'Error during processing signal', body, e)
+          }
+        })();
+      }
+
+      res.writeHead(200);
+      res.end(body);
+    });
+  });
+
+  server.listen(port, hostname, () => {
+    console.log(new Date(), `Server running at http://${hostname}:${port}/`);
+  });
 
   const initialCheckDealsTimeout = Number.parseInt(process.env.CHECK_DEALS_TIMEOUT) * 1000;
-  const tooManyRequestTimeout = 60 * 60 * 1000;
+  const tooManyRequestTimeout = Number.parseInt(process.env.TOO_MANY_REQUESTS_TIMEOUT) * 1000;
 
   let checkDealsTimeout = initialCheckDealsTimeout;
 
@@ -64,7 +119,7 @@ dotenv.config();
 
       checkDealsTimeout = initialCheckDealsTimeout;
     } catch (e) {
-      console.error(e);
+      console.log(new Date(), 'Error checking bots', e && e.message, e);
 
       if (e.message === TOO_MANY_REQUESTS_ERROR) {
         checkDealsTimeout = tooManyRequestTimeout;
@@ -73,13 +128,9 @@ dotenv.config();
   };
 
   while (true) {
-    console.log('-----------------------------------------------------');
-    console.log(new Date());
-    console.log('-----------------------------------------------------');
-
     await checkBots();
     await new Promise(resolve => setTimeout(resolve, checkDealsTimeout));
   }
 })().catch(e => {
-  console.error(e);
+  console.log(new Date(), 'General error', e && e.message, e);
 });
