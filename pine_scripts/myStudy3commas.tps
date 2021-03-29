@@ -1,19 +1,19 @@
 //@version=4
-study(title="myStudy", precision=4)
+study(title="myStudy3commasCopy404050", precision=4)
 
 // ------ Relative Strenght Index -------
 // RSI inputs
-rsiLength = input(11, minval=1, title="RSI Length")
+rsiLength = input(7, minval=1, title="RSI Length")
 rsiSrc = input(close, title="RSI Source")
-rsiUpLine = input(80, minval=40, maxval=90, title="RSI Upper Line Value")
-rsiLowLine = input(38, minval=10, maxval=60, title="RSI Lower Line Value")
+rsiUpLine = input(70, minval=40, maxval=90, title="RSI Upper Line Value")
+rsiLowLine = input(40, minval=10, maxval=60, title="RSI Lower Line Value")
 // Second RSI
 useSecondRsi = input(true, title="Second RSI")
 secondRsiResolution = input(title="Second RSI Time Resolution, min", type=input.resolution, defval="120")
-secondRsiLength = input(14, minval=1, title="Second RSI Length")
+secondRsiLength = input(7, minval=1, title="Second RSI Length")
 secondRsiSrc = input(close, title="Second RSI Source")
 secondRsiUpLine = input(65, minval=10, maxval=90, title="Second RSI Upper Line Value")
-secondRsiLowLine = input(45, minval=10, maxval=90, title="Second RSI Lower Line Value")
+secondRsiLowLine = input(50, minval=10, maxval=90, title="Second RSI Lower Line Value")
 
 // RSI calculation
 rsiResolution = timeframe.period
@@ -81,6 +81,12 @@ bbLower2 = bbBasis - bbDev2
 bbDev3 = bbMult3 * stdev(bbSource, bbLength)
 bbUpper3 = bbBasis + bbDev3
 bbLower3 = bbBasis - bbDev3
+
+// BB Plots
+// plot(bbBasis, title="BB Basis", color=#872323)
+// bbUpperPlot = plot(bbUpper, title="BB Upper", color=color.teal)
+// bbLowerPlot = plot(bbLower, title="BB Lower", color=color.teal)
+// fill(bbUpperPlot, bbLowerPlot, title = "BB Background", color=#198787, transp=95)
 
 // -------- indicators result -----------
 applyRSI = input(title="Apply RSI on signal", type=input.bool, defval=true)

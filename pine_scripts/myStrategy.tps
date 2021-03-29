@@ -11,28 +11,20 @@ strategy(title="myStrategy",
 // RSI inputs
 rsiLength = input(11, minval=1, title="RSI Length")
 rsiSrc = input(close, title="RSI Source")
+rsiResolution = input(title="RSI Time Resolution, min", type=input.resolution, defval="15")
 rsiUpLine = input(80, minval=40, maxval=90, title="RSI Upper Line Value")
-rsiLowLine = input(38, minval=10, maxval=60, title="RSI Lower Line Value")
+rsiLowLine = input(40, minval=10, maxval=60, title="RSI Lower Line Value")
 // Second RSI
-useSecondRsi = input(true, title="Second RSI")
+useSecondRsi = input(title="Second RSI", type=input.bool, defval=true)
 secondRsiResolution = input(title="Second RSI Time Resolution, min", type=input.resolution, defval="120")
 secondRsiLength = input(14, minval=1, title="Second RSI Length")
 secondRsiSrc = input(close, title="Second RSI Source")
 secondRsiUpLine = input(65, minval=10, maxval=90, title="Second RSI Upper Line Value")
-secondRsiLowLine = input(45, minval=10, maxval=90, title="Second RSI Lower Line Value")
+secondRsiLowLine = input(50, minval=10, maxval=90, title="Second RSI Lower Line Value")
 
 // RSI calculation
-rsiResolution = timeframe.period
-rsiUp = rma(max(change(rsiSrc), 0), rsiLength)
-rsiDown = rma(-min(change(rsiSrc), 0), rsiLength)
-rsi = rsiDown == 0 ? 100 : rsiUp == 0 ? 0 : 100 - (100 / (1 + rsiUp / rsiDown))
-outRSI = security(syminfo.tickerid, rsiResolution, rsi)
-
-// secondRsi = rsi(rsiSrc, rsiLength)
-secondRsiUp = rma(max(change(secondRsiSrc), 0), secondRsiLength)
-secondRsiDown = rma(-min(change(secondRsiSrc), 0), secondRsiLength)
-secondRsi = secondRsiDown == 0 ? 100 : secondRsiUp == 0 ? 0 : 100 - (100 / (1 + secondRsiUp / secondRsiDown))
-secondOutRSI = security(syminfo.tickerid, secondRsiResolution, secondRsi)
+outRSI = security(syminfo.tickerid, rsiResolution, rsi(rsiSrc, rsiLength))
+secondOutRSI = security(syminfo.tickerid, secondRsiResolution, rsi(secondRsiSrc, secondRsiLength))
 
 // RSI plot
 plot(outRSI, title="RSI", style=plot.style_line, linewidth=2, color=color.orange)
@@ -87,11 +79,31 @@ bbLower2 = bbBasis - bbDev2
 bbDev3 = bbMult3 * stdev(bbSource, bbLength)
 bbUpper3 = bbBasis + bbDev3
 bbLower3 = bbBasis - bbDev3
+// ------ Bollinger Bands end ---------
+
+// ----- Crypto Market Cap RSI -------
+// RSI inputs
+useCryptoRsi = input(title="Show Crypto RSI", type=input.bool, defval=false)
+cmcRsiLength = input(10, minval=1, title="CMC RSI Length")
+cmcRsiSrc = input(close, title="CMC RSI Source")
+cmcRsiResolution = input(title="CMC RSI Time Resolution, min", type=input.resolution, defval="15")
+cmcRsiUpLine = input(70, minval=40, maxval=90, title="CMC RSI Upper Line Value")
+cmcRsiLowLine = input(40, minval=10, maxval=60, title="CMC RSI Lower Line Value")
+
+// RSI calculation
+cmcRSI = security('TOTAL2', cmcRsiResolution, rsi(cmcRsiSrc, cmcRsiLength))
+
+// RSI plot
+plot(useCryptoRsi ? cmcRSI : na, title="CMC RSI", style=plot.style_line, linewidth=2, color=color.teal)
+plot(useCryptoRsi ? cmcRsiUpLine : na, title= "CMC RSI Upper Line", style=hline.style_solid, linewidth=2, color=color.teal, transp=80)
+plot(useCryptoRsi ? cmcRsiLowLine : na, title= "CMC RSI Lower Line", style=hline.style_solid, linewidth=2, color=color.teal, transp=80)
+// ----- Crypto Market Cap RSI end -------
 
 // -------- indicators result -----------
 applyRSI = input(title="Apply RSI on signal", type=input.bool, defval=true)
 applyUO = input(title="Apply UO on signal", type=input.bool, defval=true)
 applyBB = input(title="Apply BB on signal", type=input.bool, defval=true)
+applyCryptoRSI = input(title="Apply Crypto RSI on signal", type=input.bool, defval=false)
 
 rsiAboveLine = outRSI >= rsiUpLine ? 1 : 0
 rsiBelowLine = outRSI <= rsiLowLine ? 1 : 0
@@ -108,19 +120,26 @@ bbLowerCross2 = bbMult2 and close[1] < bbLower2[1] and close > bbLower2
 bbUpperCross3 = bbMult3 and close[1] > bbUpper3[1] and close < bbUpper3
 bbLowerCross3 = bbMult3 and close[1] < bbLower3[1] and close > bbLower3
 
+// calculated in opposite direction than usual RSI,
+// because when whole market changes drastically it is not good time for orders
+cmcRsiBelowBuyingLine = cmcRSI <= cmcRsiUpLine ? 1 : 0
+cmcRsiAboveSellingLine = cmcRSI >= cmcRsiLowLine ? 1 : 0
+
 rsiShortSignal = not applyRSI or (rsiAboveLine and secondRsiAboveLine) ? 1 : 0
 rsiLongSignal = not applyRSI or (rsiBelowLine and secondRsiBelowLine) ? 1 : 0
 uoShortSignal = not applyUO or uoAboveLine ? 1 : 0
 uoLongSignal = not applyUO or uoBelowLine ? 1 : 0
 bbShortSignal = not applyBB or bbUpperCross1 or bbUpperCross2 or bbUpperCross3 ? 1 : 0
 bbLongSignal = not applyBB or bbLowerCross1 or bbLowerCross2 or bbLowerCross3 ? 1 : 0
+cryptoRsiShortSignal = not applyCryptoRSI or cmcRsiBelowBuyingLine ? 1 : 0
+cryptoRsiLongSignal = not applyCryptoRSI or cmcRsiAboveSellingLine ? 1 : 0
 
-sellSignal = rsiShortSignal and uoShortSignal and bbShortSignal ? 1 : 0
-buySignal = rsiLongSignal and uoLongSignal and bbLongSignal ? 1 : 0
+sellSignal = rsiShortSignal and uoShortSignal and bbShortSignal and cryptoRsiShortSignal ? 1 : 0
+buySignal = rsiLongSignal and uoLongSignal and bbLongSignal and cryptoRsiLongSignal ? 1 : 0
 
 // indicators show
-bgcolor(rsiShortSignal and uoShortSignal ? color.new(color.red, 80) : na, title="Time to sell")
-bgcolor(rsiLongSignal and uoLongSignal ? color.new(color.green, 80) : na, title="Time to buy")
+bgcolor(rsiShortSignal and uoShortSignal and cryptoRsiShortSignal ? color.new(color.red, 80) : na, title="Time to sell")
+bgcolor(rsiLongSignal and uoLongSignal and cryptoRsiLongSignal ? color.new(color.green, 80) : na, title="Time to buy")
 plotshape(sellSignal, style=shape.triangledown, location=location.bottom, color=color.red, size=size.tiny)
 plotshape(buySignal, style=shape.triangleup, location=location.bottom, color=color.green, size=size.tiny)
 
@@ -183,9 +202,9 @@ float buyMoreShortPrice = strategy.position_avg_price * (100 + absolutePosition 
 // plot(filledOrders, color=color.black)
 
 if (isLongStrategy)
-    strategy.order("Long", strategy.long, qty=firstPositionQty, when = buySignal and not absolutePosition)
+    strategy.order("Long", strategy.long, qty=firstPositionQty, when = buySignal and absolutePosition == 0)
 
-    strategy.order("Long" + tostring(filledOrders + 1), strategy.long, buyMoreQty, when=(absolutePosition and filledOrders < maxOrders and close <= buyMoreLongPrice))
+    strategy.order("Long" + tostring(filledOrders + 1), strategy.long, buyMoreQty, when=(absolutePosition > 0 and filledOrders < maxOrders and close <= buyMoreLongPrice))
 
     shouldSellOnSignal = closeOnSignal and sellSignal ? 1 : 0
     shouldSellOnTP = closeOnTP and close >= tpLongExitPrice ? 1 : 0
@@ -194,9 +213,9 @@ if (isLongStrategy)
     strategy.close_all(comment="TP", when=(shouldSellOnSignal or shouldSellOnTP or shouldSellOnSL))
 
 if (isShortStrategy)
-    strategy.order("Short", strategy.short, qty=firstPositionQty, when = sellSignal and not absolutePosition)
+    strategy.order("Short", strategy.short, qty=firstPositionQty, when = sellSignal and absolutePosition == 0)
 
-    strategy.order("Short" + tostring(filledOrders + 1), strategy.short, buyMoreQty, when=(absolutePosition and filledOrders < maxOrders and close >= buyMoreShortPrice))
+    strategy.order("Short" + tostring(filledOrders + 1), strategy.short, buyMoreQty, when=(absolutePosition > 0 and filledOrders < maxOrders and close >= buyMoreShortPrice))
 
     shouldBuyOnSignal = closeOnSignal and buySignal ? 1 : 0
     shouldBuyOnTP = closeOnTP and close <= tpShortExitPrice ? 1 : 0
