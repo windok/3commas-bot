@@ -26,8 +26,6 @@ export class SignalOutdatedConstraint implements ValidatorConstraintInterface {
     const currentTime = new Date().getTime();
     const signalTime = new Date(value).getTime();
 
-    console.log({ currentTime, signalTime, diff: (currentTime - signalTime) / (60 * 1000) });
-    console.log(currentTime >= signalTime, currentTime - OUTDATED_SIGNAL_AGE <= signalTime);
     return currentTime >= signalTime && currentTime - OUTDATED_SIGNAL_AGE <= signalTime;
   }
 

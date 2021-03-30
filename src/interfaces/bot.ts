@@ -11,7 +11,7 @@ export interface BotType {
   created_at: string;
   type: 'Bot::MultiBot' | 'Bot::SingleBot' | 'Bot::SwitchBot';
   strategy: 'long' | 'short';
-  strategy_list: string; // todo parse json
+  strategy_list: Array<string>; // todo parse json
   updated_at: string;
 
   base_order_volume: string;

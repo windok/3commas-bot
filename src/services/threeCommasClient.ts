@@ -1,7 +1,7 @@
 import * as crypto from 'crypto';
 import * as querystring from 'querystring';
 import { ParsedUrlQueryInput } from 'querystring';
-import { Injectable, HttpService } from '@nestjs/common';
+import { Injectable, HttpService, HttpStatus, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { TOO_MANY_REQUESTS_ERROR, THREE_COMMAS_REQUEST_ERROR } from '../interfaces/errors';
 import { DealType } from '../interfaces/deal';
@@ -46,24 +46,52 @@ export default class ThreeCommasClient {
           method,
           baseURL: this.url,
           url: path,
-          params,
-          timeout: 30000,
           headers: {
             APIKEY: this.apiKey,
-            Signature: this.generateSignature(path, params ? querystring.stringify(params) : ''),
+            Signature: this.generateSignature(
+              path,
+              method === 'GET' ? querystring.stringify(params) : JSON.stringify(params),
+            ),
+            'Content-Type': 'application/json',
           },
+          ...(method === 'GET' ? { params } : { data: params }),
+          timeout: 30000,
+          transformResponse: [
+            data => {
+              let payload: T | { error: string };
+
+              try {
+                payload = JSON.parse(data);
+              } catch (e) {
+                console.log(new Date(), 'Response is not json', JSON.stringify(e));
+
+                throw new InternalServerErrorException(THREE_COMMAS_REQUEST_ERROR);
+              }
+
+              if ((payload as { error?: string })?.error) {
+                console.log(new Date(), 'Response is with error', JSON.stringify(payload));
+
+                throw new InternalServerErrorException(THREE_COMMAS_REQUEST_ERROR);
+              }
+
+              return payload as T;
+            },
+          ],
         })
         .toPromise();
 
       return response.data;
     } catch (e) {
-      console.error(e, e && e.response && e.response.data);
+      console.log(new Date(), 'Request error', JSON.stringify(e));
 
-      if (e.status === 429 || (e.response && e.response.status === 429)) {
-        throw new Error(TOO_MANY_REQUESTS_ERROR);
+      if (
+        e.status === HttpStatus.TOO_MANY_REQUESTS ||
+        e.response?.status === HttpStatus.TOO_MANY_REQUESTS
+      ) {
+        throw new InternalServerErrorException(TOO_MANY_REQUESTS_ERROR);
       }
 
-      throw new Error(THREE_COMMAS_REQUEST_ERROR);
+      throw new InternalServerErrorException(THREE_COMMAS_REQUEST_ERROR);
     }
   }
 
@@ -117,9 +145,10 @@ export default class ThreeCommasClient {
       // btc_price_limit: bot.btc_price_limit,
       safety_order_step_percentage: bot.safety_order_step_percentage,
       take_profit_type: bot.take_profit_type,
-      strategy_list: bot.strategy_list,
       // todo check
-      // strategy_list: bot.strategy_list.map(JSON.stringify),
+      // strategy_list: bot.strategy_list,
+      // strategy_list: bot.strategy_list.map(x => JSON.stringify(x)),
+      strategy_list: [], // manual trading
       min_price: bot.min_price,
       max_price: bot.max_price,
       stop_loss_percentage: bot.stop_loss_percentage,

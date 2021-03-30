@@ -10,33 +10,15 @@ export class AppController {
 
   @Post('trading-view-signal')
   async receiveSignal(@Body() payload: Object) {
-    try {
-      await validateOrReject(plainToClass(SignalDto, payload));
-    } catch (e) {
-      console.log(new Date(), 'Incorrect signal payload', JSON.stringify(e));
-
-      throw new BadRequestException(e);
-    }
-
-    return this.appService.receiveTradingviewSignal(payload as SignalDto);
+    return this.handleSignal(payload as SignalDto);
   }
 
   @Post('')
   async receiveSignalMain(@Body() payload: Object) {
-    try {
-      await validateOrReject(plainToClass(SignalDto, payload));
-    } catch (e) {
-      console.log(new Date(), 'Incorrect signal payload', JSON.stringify(e));
-
-      throw new BadRequestException(e);
-    }
-
-    return this.appService.receiveTradingviewSignal(payload as SignalDto);
+    return this.handleSignal(payload as SignalDto);
   }
 
-  @Get('')
-  async receiveSignalMainGet(@Body() payload: Object) {
-    console.log(new Date(), 'GET request');
+  private async handleSignal(payload: SignalDto) {
     try {
       await validateOrReject(plainToClass(SignalDto, payload));
     } catch (e) {
@@ -45,6 +27,6 @@ export class AppController {
       throw new BadRequestException(e);
     }
 
-    return this.appService.receiveTradingviewSignal(payload as SignalDto);
+    return this.appService.receiveTradingviewSignal(payload);
   }
 }

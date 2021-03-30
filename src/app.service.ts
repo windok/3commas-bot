@@ -35,7 +35,7 @@ export class AppService {
     try {
       await this.checkDeals();
     } catch (e) {
-      console.log(new Date(), 'Error checking bots', e && e.message, e);
+      console.log(new Date(), 'Error checking bots', e && e.message, JSON.stringify(e));
 
       if (e.message === TOO_MANY_REQUESTS_ERROR) {
         checkDealsTimeout = Number.parseInt(this.configService.get('TOO_MANY_REQUESTS_TIMEOUT'));
@@ -90,6 +90,8 @@ export class AppService {
 
       throw new BadRequestException('Incorrect security pair');
     }
+
+    console.log(new Date(), 'Received signal', JSON.stringify(signal));
 
     switch (signal.account) {
       case SignalAccount.BINANCE_SPOT:
