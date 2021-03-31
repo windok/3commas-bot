@@ -146,9 +146,9 @@ export default class ThreeCommasClient {
       safety_order_step_percentage: bot.safety_order_step_percentage,
       take_profit_type: bot.take_profit_type,
       // todo check
-      // strategy_list: bot.strategy_list,
+      strategy_list: bot.strategy_list,
       // strategy_list: bot.strategy_list.map(x => JSON.stringify(x)),
-      strategy_list: [], // manual trading
+      // strategy_list: [], // manual trading
       min_price: bot.min_price,
       max_price: bot.max_price,
       stop_loss_percentage: bot.stop_loss_percentage,

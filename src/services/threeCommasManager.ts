@@ -5,7 +5,6 @@ import { DealType } from '../interfaces/deal';
 import { ConfigService } from '@nestjs/config';
 import { BotFullType, BotType } from '../interfaces/bot';
 import { SignalDto, SignalStrategy } from '../interfaces/signal.dto';
-import { sign } from 'crypto';
 
 @Injectable()
 export default class ThreeCommasManager {
