@@ -7,13 +7,13 @@ import { AppModule } from './app.module';
 // set price corridor for each pair
 // set appropriate strategy for each pair
 // check Bitcoin flows when deciding to work with other pair
-// no stop loss for good coins and small SL for shitcoins
 
 // todo sanitize webhook payload
-// todo futures signals without spot->futures transferring
 // todo open short positions
 // todo log both in file and stdout, log with time
+// todo log levels: info/debug/error
 // optional todo when starting futures deal check that there are no active positions even for bots that are not configured in env
+// todo when received error for pair because of pair is running then blacklist it for 10min
 // todo move to docker
 // todo move to cloud
 // todo get rid of 3commas

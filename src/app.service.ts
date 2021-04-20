@@ -1,82 +1,76 @@
 import { Injectable, BadRequestException } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import ThreeCommasClient from './services/threeCommasClient';
 import ThreeCommasManager from './services/threeCommasManager';
+import SignalService from './services/signalService';
 import { TOO_MANY_REQUESTS_ERROR } from './interfaces/errors';
-import { ConfigService } from '@nestjs/config';
-import { SignalDto, SignalAccount } from './interfaces/signal.dto';
+import { AccountType } from './interfaces/meta';
+import { SignalDto } from './interfaces/signal.dto';
+import { DelayedInvestDto } from './interfaces/delayed-invest.dto';
 
 const CHECK_DEALS_TIMEOUT = 'CHECK_DEALS_TIMEOUT';
 
 @Injectable()
 export class AppService {
+  private checkDealsTimeout: number;
+  private extendedCheckDealsTimeout: number;
+
   constructor(
     private readonly configService: ConfigService,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly threeCommasClient: ThreeCommasClient,
     private readonly threeCommasManager: ThreeCommasManager,
+    private readonly signalService: SignalService,
   ) {}
 
   async onApplicationBootstrap() {
-    await this.threeCommasManager.loadAccounts();
-    await this.threeCommasManager.loadMatchingFuturesPairs();
+    this.checkDealsTimeout = Number.parseInt(this.configService.get('CHECK_DEALS_TIMEOUT'));
+    this.extendedCheckDealsTimeout = Number.parseInt(
+      this.configService.get('TOO_MANY_REQUESTS_TIMEOUT'),
+    );
 
-    await this.scheduleCheckingDeals();
+    await this.threeCommasManager.loadAccounts();
+    await this.threeCommasManager.loadBotInfo(AccountType.BINANCE_FUTURES);
+    await this.threeCommasManager.loadBotInfo(AccountType.BINANCE_SPOT);
+
+    await this.checkDeals();
   }
 
   // todo update accounts info time from time
 
-  async scheduleCheckingDeals() {
+  clearCheckingDealTimeout = () => {
     if (this.schedulerRegistry.doesExists('timeout', CHECK_DEALS_TIMEOUT)) {
+      clearTimeout(this.schedulerRegistry.getTimeout(CHECK_DEALS_TIMEOUT));
+
       this.schedulerRegistry.deleteTimeout(CHECK_DEALS_TIMEOUT);
     }
-    let checkDealsTimeout = Number.parseInt(this.configService.get('CHECK_DEALS_TIMEOUT'));
+  };
+
+  scheduleCheckingDeals = (checkDealsTimeout: number) => {
+    this.clearCheckingDealTimeout();
+
+    const checkDealsTimeoutId = setTimeout(this.checkDeals.bind(this), checkDealsTimeout * 1000);
+
+    this.schedulerRegistry.addTimeout(CHECK_DEALS_TIMEOUT, checkDealsTimeoutId);
+  };
+
+  async checkDeals() {
+    this.clearCheckingDealTimeout();
+
+    let checkDealsTimeout = this.checkDealsTimeout;
 
     try {
-      await this.checkDeals();
+      await this.threeCommasManager.checkFuturesDeals();
     } catch (e) {
       console.log(new Date(), 'Error checking bots', e && e.message, JSON.stringify(e));
 
       if (e.message === TOO_MANY_REQUESTS_ERROR) {
-        checkDealsTimeout = Number.parseInt(this.configService.get('TOO_MANY_REQUESTS_TIMEOUT'));
+        checkDealsTimeout = this.extendedCheckDealsTimeout;
       }
     }
 
-    const checkDealsTimeoutId = setTimeout(
-      this.scheduleCheckingDeals.bind(this),
-      checkDealsTimeout * 1000,
-    );
-
-    this.schedulerRegistry.addTimeout(CHECK_DEALS_TIMEOUT, checkDealsTimeoutId);
-  }
-
-  async checkDeals() {
-    // const { mainBot, ...botInfo } = await this.threeCommasManager.loadBotInfo();
-    // let { availableSlaveBots, activeSlaveBots } = botInfo;
-    //
-    // const {
-    //   notStartedDeals,
-    //   startedDeals,
-    // } = await this.threeCommasManager.getBestPossibleDealsToCopy(mainBot, activeSlaveBots);
-    //
-    // const isFinished = await this.threeCommasManager.finishProfitableFuturesBots(
-    //   activeSlaveBots,
-    //   availableSlaveBots,
-    //   startedDeals.map(({ pair }) => pair),
-    //   notStartedDeals.map(({ pair }) => pair),
-    // );
-    //
-    // if (isFinished) {
-    //   const updatedBotInfo = await this.threeCommasManager.loadBotInfo();
-    //
-    //   availableSlaveBots = updatedBotInfo.availableSlaveBots;
-    //   activeSlaveBots = updatedBotInfo.activeSlaveBots;
-    // }
-    //
-    // await Promise.all([
-    //   this.threeCommasManager.recalculateTakeProfits(activeSlaveBots),
-    //   this.threeCommasManager.startFutureBots(availableSlaveBots, notStartedDeals),
-    // ]);
+    this.scheduleCheckingDeals(checkDealsTimeout);
   }
 
   async receiveTradingviewSignal(signal: SignalDto) {
@@ -92,13 +86,27 @@ export class AppService {
     }
 
     console.log(new Date(), 'Received signal', JSON.stringify(signal));
+    const activeDeals = this.threeCommasManager.getStartedDeals(signal.account, signal.strategy);
 
-    switch (signal.account) {
-      case SignalAccount.BINANCE_SPOT:
-        return this.threeCommasManager.startSpotSignalDeal(signal);
-      case SignalAccount.BINANCE_FUTURES:
-        return this.threeCommasManager.startFuturesSignalDeal(signal);
-      default:
+    // add signal only when there is no fresh deal for the same signal
+    if (
+      activeDeals.find(
+        d =>
+          d.pair === signal.pair &&
+          new Date(d.created_at).getTime() + 4 * 60 * 1000 > new Date().getTime(),
+      )
+    ) {
+      console.log(
+        new Date(),
+        'Skipping signal because there is already fresh deal running',
+        JSON.stringify(signal),
+      );
+    } else {
+      this.signalService.addSignal(signal);
     }
+  }
+
+  async scheduleAdditionalInvesting(payload: DelayedInvestDto) {
+    return this.threeCommasManager.scheduleAdditionalInvesting(payload);
   }
 }

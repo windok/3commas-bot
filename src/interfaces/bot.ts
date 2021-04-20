@@ -1,6 +1,5 @@
 import { DealType } from './deal';
 
-
 export interface BotType {
   id: number;
   is_enabled: boolean;
@@ -59,6 +58,8 @@ export interface BotType {
 
   finished_deals_profit_usd: string;
   finished_deals_count: string;
+
+  active_deals?: DealType[];
 }
 
 export interface BotFullType extends BotType {

@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import ThreeCommasClient from './services/threeCommasClient';
 import ThreeCommasManager from './services/threeCommasManager';
+import SignalService from './services/signalService';
 
 @Module({
   imports: [
@@ -13,6 +14,6 @@ import ThreeCommasManager from './services/threeCommasManager';
     HttpModule,
   ],
   controllers: [AppController],
-  providers: [AppService, ThreeCommasClient, ThreeCommasManager],
+  providers: [AppService, ThreeCommasClient, ThreeCommasManager, SignalService],
 })
 export class AppModule {}

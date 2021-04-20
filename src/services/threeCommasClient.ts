@@ -5,8 +5,9 @@ import { Injectable, HttpService, HttpStatus, InternalServerErrorException } fro
 import { ConfigService } from '@nestjs/config';
 import { TOO_MANY_REQUESTS_ERROR, THREE_COMMAS_REQUEST_ERROR } from '../interfaces/errors';
 import { DealType } from '../interfaces/deal';
-import { AccountType } from '../interfaces/account';
+import { Account } from '../interfaces/account';
 import { BotType, BotFullType } from '../interfaces/bot';
+import { AddingFunds } from '../interfaces/adding-funds';
 
 const API_URL = 'https://api.3commas.io';
 
@@ -95,8 +96,8 @@ export default class ThreeCommasClient {
     }
   }
 
-  getAccounts(): Promise<AccountType[]> {
-    return this.makeRequest<AccountType[]>('GET', '/public/api/ver1/accounts');
+  getAccounts(): Promise<Account[]> {
+    return this.makeRequest<Account[]>('GET', '/public/api/ver1/accounts');
   }
 
   getAccountsMarketList() {
@@ -119,7 +120,7 @@ export default class ThreeCommasClient {
     });
   }
 
-  updateBot(botId: number, botData: Partial<BotType>): Promise<BotType> {
+  updateBot(botId: number, botData: Partial<BotType> & ParsedUrlQueryInput): Promise<BotType> {
     return this.makeRequest<BotType>('PATCH', `/public/api/ver1/bots/${botId}/update`, botData);
   }
 
@@ -166,12 +167,35 @@ export default class ThreeCommasClient {
     });
   }
 
-  updateDeal(dealId, dealData): Promise<DealType> {
+  getDeal(dealId: number): Promise<DealType> {
+    return this.makeRequest<DealType>('GET', `/public/api/ver1/deals/${dealId}/show`);
+  }
+
+  updateDeal(dealId: number, dealData: Partial<DealType>): Promise<DealType> {
     return this.makeRequest<DealType>(
       'PATCH',
       `/public/api/ver1/deals/${dealId}/update_deal`,
       dealData,
     );
+  }
+
+  getAddingFundsInfo(dealId: number): Promise<AddingFunds> {
+    return this.makeRequest<AddingFunds>(
+      'GET',
+      `/public/api/ver1/deals/${dealId}/data_for_adding_funds`,
+    );
+  }
+
+  addingFunds(
+    dealId: number,
+    payload: { quantity: number; isMarket: boolean; rate?: number },
+  ): Promise<DealType> {
+    return this.makeRequest<DealType>('POST', `/public/api/ver1/deals/${dealId}/add_funds`, {
+      quantity: payload.quantity,
+      is_market: payload.isMarket,
+      rate: payload.rate,
+      response_type: 'deal',
+    });
   }
 
   ping() {

@@ -1,8 +1,9 @@
 import { plainToClass } from 'class-transformer';
 import { validateOrReject } from 'class-validator';
-import { Controller, Get, Post, Body, BadRequestException } from '@nestjs/common';
+import { Controller, Post, Body, BadRequestException } from '@nestjs/common';
 import { AppService } from './app.service';
 import { SignalDto } from './interfaces/signal.dto';
+import { DelayedInvestDto } from './interfaces/delayed-invest.dto';
 
 @Controller()
 export class AppController {
@@ -10,15 +11,6 @@ export class AppController {
 
   @Post('trading-view-signal')
   async receiveSignal(@Body() payload: Object) {
-    return this.handleSignal(payload as SignalDto);
-  }
-
-  @Post('')
-  async receiveSignalMain(@Body() payload: Object) {
-    return this.handleSignal(payload as SignalDto);
-  }
-
-  private async handleSignal(payload: SignalDto) {
     try {
       await validateOrReject(plainToClass(SignalDto, payload));
     } catch (e) {
@@ -27,6 +19,11 @@ export class AppController {
       throw new BadRequestException(e);
     }
 
-    return this.appService.receiveTradingviewSignal(payload);
+    return this.appService.receiveTradingviewSignal(payload as SignalDto);
+  }
+
+  @Post('delayed-add-funds')
+  async scheduleAddingFunds(@Body() payload: DelayedInvestDto) {
+    return this.appService.scheduleAdditionalInvesting(payload);
   }
 }

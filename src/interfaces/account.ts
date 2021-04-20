@@ -1,4 +1,4 @@
-export interface AccountType {
+export interface Account {
   id: number;
   name: string;
   exchange_name: string;

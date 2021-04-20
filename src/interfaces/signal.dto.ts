@@ -7,16 +7,7 @@ import {
   ValidatorConstraint,
   ValidatorConstraintInterface,
 } from 'class-validator';
-
-export enum SignalAccount {
-  BINANCE_SPOT = 'binance_spot',
-  BINANCE_FUTURES = 'binance_futures',
-}
-
-export enum SignalStrategy {
-  LONG = 'long',
-  SHORT = 'short',
-}
+import { AccountType, Strategy } from './meta';
 
 export const OUTDATED_SIGNAL_AGE = 5 * 60 * 1000; // 5 min
 
@@ -38,21 +29,21 @@ export class SignalDto {
   @IsNotEmpty()
   token: string;
 
-  @IsString()
   @IsNotEmpty()
+  @IsString()
   pair: string;
 
-  @IsString()
   @IsNotEmpty()
+  @IsString()
   price: string;
 
-  @IsEnum(SignalAccount)
   @IsNotEmpty()
-  account: SignalAccount;
+  @IsEnum(AccountType)
+  account: AccountType;
 
-  @IsEnum(SignalStrategy)
   @IsNotEmpty()
-  strategy: SignalStrategy;
+  @IsEnum(Strategy)
+  strategy: Strategy;
 
   @IsDateString()
   @IsNotEmpty()
