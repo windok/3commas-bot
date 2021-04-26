@@ -1,5 +1,6 @@
 import {
   IsNotEmpty,
+  IsOptional,
   IsString,
   IsEnum,
   IsDateString,
@@ -49,4 +50,7 @@ export class SignalDto {
   @IsNotEmpty()
   @Validate(SignalOutdatedConstraint)
   time: string;
+
+  @IsOptional()
+  isStrong?: number | boolean;
 }

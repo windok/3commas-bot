@@ -35,7 +35,13 @@ export default class SignalService {
         s => s.account === account && s.strategy === Strategy.LONG && !this.isSignalBlacklisted(s), // todo both short and long
       )
       .sort((signalA, signalB) =>
-        new Date(signalA.time).getTime() < new Date(signalB.time).getTime() ? 1 : -1,
+        signalA.isStrong && !signalB.isStrong
+          ? -1
+          : !signalA.isStrong && signalB.isStrong
+          ? 1
+          : new Date(signalA.time).getTime() < new Date(signalB.time).getTime()
+          ? 1
+          : -1,
       );
 
     const uniqueSignals = [];

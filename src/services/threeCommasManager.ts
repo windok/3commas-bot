@@ -35,6 +35,9 @@ export default class ThreeCommasManager {
     [2, { tp: '0.4', ttp: '0.1' }],
     [3, { tp: '0.4', ttp: '0.1' }],
     [4, { tp: '0.3', ttp: '0.1' }],
+    [5, { tp: '0.3', ttp: '0.1' }],
+    [6, { tp: '0.3', ttp: '0.1' }],
+    [7, { tp: '0.3', ttp: '0.1' }],
   ]);
 
   // todo move to db
@@ -332,7 +335,11 @@ export default class ThreeCommasManager {
   async processNewSignals(signals: SignalDto[], bots: BotType[]) {
     const activeDeals = this.getActiveDeals(bots);
     let freeBots = bots.filter(b => b.is_enabled && !b.active_deals_count);
-    const newSignals = signals.filter(s => !activeDeals.find(d => d.pair === s.pair));
+    const newSignals = signals
+      .filter(
+        s => !activeDeals.find(d => d.pair === s.pair) && (activeDeals.length <= 4 || s.isStrong),
+      )
+      .sort((signalA, signalB) => (signalA.isStrong ? -1 : signalB.isStrong ? 1 : 0));
 
     if (!newSignals.length || !freeBots.length) {
       return;
@@ -342,10 +349,18 @@ export default class ThreeCommasManager {
 
     for (let i = 0; i < newSignals.length; i++) {
       const signal = newSignals[i];
-      const matchingBots = freeBots.filter(b => this.isBotAvailableForSignal(b, signal));
+      const readyBots = freeBots
+        .filter(b => this.isBotAvailableForSignal(b, signal))
+        .sort((botA, botB) =>
+          this.isAmountGreater(botA.base_order_volume, botB.base_order_volume)
+            ? -1
+            : this.isAmountLess(botA.base_order_volume, botB.base_order_volume)
+            ? 1
+            : 0,
+        );
 
-      if (matchingBots.length) {
-        const botToStart = matchingBots[0];
+      if (readyBots.length) {
+        const botToStart = signal.isStrong ? readyBots.shift() : readyBots.pop();
         freeBots = freeBots.filter(b => b.id !== botToStart.id);
 
         await this.startFutureBot(botToStart, signal);
