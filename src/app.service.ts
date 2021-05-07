@@ -31,7 +31,6 @@ export class AppService {
     );
 
     await this.threeCommasManager.loadAccounts();
-    await this.threeCommasManager.loadBotInfo(AccountType.BINANCE_FUTURES);
     await this.threeCommasManager.loadBotInfo(AccountType.BINANCE_SPOT);
 
     await this.checkDeals();
@@ -61,7 +60,7 @@ export class AppService {
     let checkDealsTimeout = this.checkDealsTimeout;
 
     try {
-      await this.threeCommasManager.checkFuturesDeals();
+      await this.threeCommasManager.checkSpotDeals();
     } catch (e) {
       console.log(new Date(), 'Error checking bots', e && e.message, JSON.stringify(e));
 
@@ -79,6 +78,7 @@ export class AppService {
 
       throw new BadRequestException('Incorrect security token');
     }
+
     if (signal.pair.indexOf('USDT_') !== 0) {
       console.log(new Date(), 'Incorrect signal pair', JSON.stringify(signal));
 

@@ -1,0 +1,11 @@
+.idea
+
+.git
+
+node_modules
+
+dist
+
+pine_scripts
+logs
+test

@@ -1,0 +1,20 @@
+version: "3.9"
+services:
+  3commas-bot:
+    env_file: .env
+    build:
+      context: ./
+      dockerfile: ./Dockerfile
+      args:
+        - WORK_DIR=${WORK_DIR}
+    ports:
+      - ${HOST_PORT}:${PORT}
+    volumes:
+      - './src:${WORK_DIR}/src'
+      - './tsconfig.json:${WORK_DIR}/tsconfig.json'
+      - './tsconfig.build.json:${WORK_DIR}/tsconfig.build.json'
+      - './.eslintrc.js:${WORK_DIR}/.eslintrc.js'
+      - './.eslintignore:${WORK_DIR}/.eslintignore'
+      - './.prettierrc:${WORK_DIR}/.prettierrc'
+      - './nest-cli.json:${WORK_DIR}/nest-cli.json'
+    entrypoint: ["npm", "run", "start:dev"]

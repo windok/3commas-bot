@@ -25,8 +25,7 @@ interface Investing {
 
 @Injectable()
 export default class ThreeCommasManager {
-  private startTime: Date = new Date();
-  private checkFuturesCounter = 0;
+  private checkSpotCounter = 0;
   private accountMap: Map<AccountType, Account> = new Map();
 
   private readonly finishBotProfitMap = new Map<number, { tp: string; ttp: string }>([
@@ -80,7 +79,7 @@ export default class ThreeCommasManager {
   }
 
   getAccount(accountType: AccountType): Account {
-    const account = this.accountMap.get(AccountType.BINANCE_FUTURES);
+    const account = this.accountMap.get(accountType);
 
     if (!account) {
       console.log(new Date(), 'Requested account not found', accountType);
@@ -91,6 +90,8 @@ export default class ThreeCommasManager {
   }
 
   async reloadBotInfo(bots: BotType[], botIdsToReload: number[]): Promise<BotFullType[]> {
+    botIdsToReload = [...new Set(botIdsToReload)];
+
     return (
       await Promise.all<BotFullType>(
         bots.map(bot =>
@@ -135,7 +136,7 @@ export default class ThreeCommasManager {
     return (
       bot.is_enabled &&
       bot.account_id === this.getAccount(signal.account).id &&
-      (signal.account !== AccountType.BINANCE_FUTURES || bot.active_deals_count === 0) &&
+      bot.max_active_deals - bot.active_deals_count > 0 &&
       bot.strategy === signal.strategy
     );
   }
@@ -154,7 +155,7 @@ export default class ThreeCommasManager {
     throw new ConflictException('Impossible to start bot');
   }
 
-  async startFutureBot(bot: BotType, signal: SignalDto) {
+  async startBot(bot: BotType, signal: SignalDto) {
     console.log(
       new Date(),
       'Starting new deal',
@@ -163,14 +164,14 @@ export default class ThreeCommasManager {
 
     this.checkBotReadinessToStart(bot, signal);
 
-    this.signalService.removeSignals(signal.pair, AccountType.BINANCE_FUTURES, signal.strategy);
+    this.signalService.removeSignals(signal.pair, signal.account, signal.strategy);
 
-    if (!bot.pairs.includes(signal.pair)) {
+    if (bot.pairs.length === 1 && !bot.pairs.includes(signal.pair)) {
       bot = await this.apiClient.changeBotPair(bot, signal.pair);
 
-      this.checkBotReadinessToStart(bot, signal);
-
       console.log(new Date(), 'Changed bot', this.formatBotEntity(bot));
+
+      this.checkBotReadinessToStart(bot, signal);
     }
 
     const deal = await this.apiClient.startDealWithBot(bot.id, signal.pair);
@@ -235,7 +236,9 @@ export default class ThreeCommasManager {
   async finishProfitableDealsASAP(signals: SignalDto[], bots: BotType[]): Promise<BotFullType[]> {
     const freshDealAge = 45 * 60 * 1000; // 45 min
 
-    const freeBots = bots.filter(b => b.is_enabled && !b.active_deals_count);
+    const freeBots = bots.filter(
+      b => b.is_enabled && b.max_active_deals - b.active_deals_count > 0,
+    );
     const activeDeals = this.getActiveDeals(bots).filter(d => d.strategy === Strategy.LONG); // todo update for short
 
     const updatedDeals = (
@@ -290,51 +293,9 @@ export default class ThreeCommasManager {
     );
   }
 
-  async startSpotSignalDeal(signal) {
-    const signalBots = await this.loadBotInfo(AccountType.BINANCE_SPOT);
-    const activeBots = signalBots.filter(
-      b => b.is_enabled && b.account_id === this.getAccount(AccountType.BINANCE_SPOT).id,
-    );
-
-    const freeBots = activeBots.filter(b => b.active_deals.length < b.max_active_deals);
-    const botToStart = freeBots.find(
-      freeBot =>
-        freeBot.pairs.includes(signal.pair) &&
-        !freeBot.active_deals.find(d => d.pair === signal.pair),
-    );
-
-    const runningWithSignalDeal = activeBots.find(b =>
-      b.active_deals.find(d => d.pair === signal.pair),
-    );
-
-    if (runningWithSignalDeal) {
-      console.log(
-        new Date(),
-        'Signal already running',
-        JSON.stringify({ signal, bot: this.remapBot(runningWithSignalDeal) }),
-      );
-    }
-
-    if (botToStart) {
-      console.log(
-        new Date(),
-        'Starting new Spot bot signal deal',
-        JSON.stringify({ signal, bot: this.remapBot(botToStart) }),
-      );
-
-      // await this.apiClient.startDealWithBot(botToStart.id, signal.pair);
-    } else if (!runningWithSignalDeal) {
-      console.log(
-        new Date(),
-        'No free Spot bot for starting new signal deal',
-        JSON.stringify({ signal, bots: activeBots.map(this.remapBot) }),
-      );
-    }
-  }
-
   async processNewSignals(signals: SignalDto[], bots: BotType[]) {
     const activeDeals = this.getActiveDeals(bots);
-    let freeBots = bots.filter(b => b.is_enabled && !b.active_deals_count);
+    let freeBots = bots.filter(b => b.is_enabled && b.max_active_deals - b.active_deals_count > 0);
     const newSignals = signals
       .filter(
         s => !activeDeals.find(d => d.pair === s.pair) && (activeDeals.length <= 4 || s.isStrong),
@@ -361,9 +322,13 @@ export default class ThreeCommasManager {
 
       if (readyBots.length) {
         const botToStart = signal.isStrong ? readyBots.shift() : readyBots.pop();
-        freeBots = freeBots.filter(b => b.id !== botToStart.id);
+        freeBots = freeBots.filter(
+          b =>
+            b.id !== botToStart.id ||
+            botToStart.max_active_deals - botToStart.active_deals_count > 1,
+        );
 
-        await this.startFutureBot(botToStart, signal);
+        await this.startBot(botToStart, signal);
       } else {
         console.log(
           new Date(),
@@ -542,19 +507,19 @@ export default class ThreeCommasManager {
     }
   }
 
-  async checkFuturesDeals() {
-    this.checkFuturesCounter++;
+  async checkSpotDeals() {
+    this.checkSpotCounter++;
 
-    const signals = this.signalService.getSignals(AccountType.BINANCE_FUTURES);
+    const signals = this.signalService.getSignals(AccountType.BINANCE_SPOT);
 
     signals.length && console.log(new Date(), 'All signals', JSON.stringify(signals));
 
     // todo do not request 3commas unnecessary if anyway it is nothing to start
-    if (!signals.length && this.checkFuturesCounter % 5 !== 1) {
+    if (!signals.length && this.checkSpotCounter % 5 !== 1) {
       return;
     }
 
-    let bots = await this.loadBotInfo(AccountType.BINANCE_FUTURES);
+    let bots = await this.loadBotInfo(AccountType.BINANCE_SPOT);
 
     // todo split by long/short
     bots = await this.processVeryOldProfitableDeals(bots);
@@ -563,10 +528,10 @@ export default class ThreeCommasManager {
 
     // todo remove SO and shift SL when deal is running long
 
-    await this.processNewSignals(this.signalService.getSignals(AccountType.BINANCE_FUTURES), bots);
+    await this.processNewSignals(this.signalService.getSignals(AccountType.BINANCE_SPOT), bots);
 
     await this.processInvestingSignals(
-      this.signalService.getSignals(AccountType.BINANCE_FUTURES),
+      this.signalService.getSignals(AccountType.BINANCE_SPOT),
       bots,
     );
   }
@@ -686,8 +651,17 @@ export default class ThreeCommasManager {
 
   formatBotEntity = bot => JSON.stringify(this.remapBot(bot));
 
-  remapBot = ({ id, pairs, strategy, is_enabled, active_deals_count, active_deals }: BotType) => ({
+  remapBot = ({
     id,
+    name,
+    pairs,
+    strategy,
+    is_enabled,
+    active_deals_count,
+    active_deals,
+  }: BotType) => ({
+    id,
+    name,
     pairs,
     strategy,
     isEnabled: is_enabled,
