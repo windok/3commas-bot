@@ -166,8 +166,26 @@ export default class ThreeCommasManager {
 
     this.signalService.removeSignals(signal.pair, signal.account, signal.strategy);
 
+    let updateBotPatch: Partial<Omit<BotType, 'active_deals'>> = {};
+
+    if (bot.max_safety_orders === 1) {
+      updateBotPatch = {
+        ...updateBotPatch,
+        base_order_volume: signal.isStrong ? '150.0' : '100.0',
+        safety_order_volume: signal.isStrong ? '600.0' : '400.0',
+        take_profit: signal.isStrong ? '1.0' : '0.9',
+      };
+    }
+
     if (bot.pairs.length === 1 && !bot.pairs.includes(signal.pair)) {
-      bot = await this.apiClient.changeBotPair(bot, signal.pair);
+      updateBotPatch = {
+        ...updateBotPatch,
+        pairs: [signal.pair],
+      };
+    }
+
+    if (Object.keys(updateBotPatch).filter(k => updateBotPatch[k] !== bot[k]).length) {
+      bot = await this.apiClient.updateBotPartially(bot, updateBotPatch);
 
       console.log(new Date(), 'Changed bot', this.formatBotEntity(bot));
 
@@ -296,11 +314,36 @@ export default class ThreeCommasManager {
   async processNewSignals(signals: SignalDto[], bots: BotType[]) {
     const activeDeals = this.getActiveDeals(bots);
     let freeBots = bots.filter(b => b.is_enabled && b.max_active_deals - b.active_deals_count > 0);
+    let activeDealsCount = activeDeals.length;
+    const maxActiveDealsCount = bots.reduce((acc, b) => acc + b.max_active_deals, 0);
+
     const newSignals = signals
-      .filter(
-        s => !activeDeals.find(d => d.pair === s.pair) && (activeDeals.length <= 4 || s.isStrong),
-      )
-      .sort((signalA, signalB) => (signalA.isStrong ? -1 : signalB.isStrong ? 1 : 0));
+      .filter(s => !activeDeals.find(d => d.pair === s.pair))
+      .sort((signalA, signalB) => (signalA.isStrong ? -1 : signalB.isStrong ? 1 : 0))
+      .reduce<SignalDto[]>((acc, s) => {
+        if (activeDealsCount >= Math.round(maxActiveDealsCount * 0.4) && !s.isStrong) {
+          console.log(
+            new Date(),
+            'Skipping non strong signal',
+            JSON.stringify({ activeDealsCount, signal: s }),
+          );
+          return acc;
+        }
+
+        if (activeDealsCount >= Math.round(maxActiveDealsCount * 0.7)) {
+          console.log(
+            new Date(),
+            'Reducing signal power',
+            JSON.stringify({ activeDealsCount, signal: s }),
+          );
+
+          activeDealsCount++;
+          return [...acc, { ...s, isStrong: false }];
+        }
+
+        activeDealsCount++;
+        return [...acc, s];
+      }, []);
 
     if (!newSignals.length || !freeBots.length) {
       return;
@@ -680,6 +723,7 @@ export default class ThreeCommasManager {
     actual_profit_percentage,
     take_profit,
     bought_average_price,
+    bought_volume,
     current_price,
     take_profit_price,
   }: DealType) => ({
@@ -697,6 +741,7 @@ export default class ThreeCommasManager {
     actualProfitPercentage: actual_profit_percentage,
     takeProfitPercentage: take_profit,
     boughtPrice: bought_average_price,
+    boughtVolume: bought_volume,
     currentPrice: current_price,
     takeProfitPrice: take_profit_price,
   });

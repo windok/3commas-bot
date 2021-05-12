@@ -3,6 +3,7 @@
 
 //@version=4
 study("myDivergence", overlay = true, max_bars_back = 1000, max_lines_count = 400, max_labels_count = 400)
+
 prd = input(defval = 5, title = "Pivot Period", minval = 1, maxval = 50)
 source = input(defval = "Close", title = "Source for Pivot Points", options = ["Close", "High/Low"])
 searchdiv = input(defval = "Regular/Hidden", title = "Divergence Type", options = ["Regular", "Hidden", "Regular/Hidden"])
@@ -393,8 +394,8 @@ if showindis != "Don't Show" or shownum
                                  style = label.style_label_up
                                  ))
 
-diverenceSignalValue = dnumdiv_top > 0 ? -dnumdiv_top : dnumdiv_bottom
-plot(diverenceSignalValue, title="DivergenceSignalValue", color=color.red, linewidth=3, display=display.none)
+divergenceSignalValue = dnumdiv_top > 0 ? -dnumdiv_top : dnumdiv_bottom
+plot(divergenceSignalValue, title="DivergenceSignalValue", color=color.red, linewidth=3, display=display.none)
 
 alertcondition(pos_reg_div_detected, title='Positive Regular Divergence Detected', message='Positive Regular Divergence Detected')
 alertcondition(neg_reg_div_detected, title='Negative Regular Divergence Detected', message='Negative Regular Divergence Detected')

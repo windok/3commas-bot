@@ -124,9 +124,9 @@ export default class ThreeCommasClient {
     return this.makeRequest<BotType>('PATCH', `/public/api/ver1/bots/${botId}/update`, botData);
   }
 
-  changeBotPair(bot: BotType, newPair: string): Promise<BotType> {
+  updateBotPartially(bot: BotType, botData: Partial<Omit<BotType, 'active_deals'>>) {
     return this.updateBot(bot.id, {
-      pairs: [newPair],
+      pairs: bot.pairs,
       name: bot.name,
       start_order_type: bot.start_order_type,
       max_active_deals: bot.max_active_deals,
@@ -158,6 +158,7 @@ export default class ThreeCommasClient {
       stop_loss_type: bot.stop_loss_type,
       disable_after_deals_count: bot.disable_after_deals_count,
       cooldown: bot.cooldown,
+      ...botData,
     });
   }
 

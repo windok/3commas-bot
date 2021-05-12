@@ -31,7 +31,8 @@ export class AppService {
     );
 
     await this.threeCommasManager.loadAccounts();
-    await this.threeCommasManager.loadBotInfo(AccountType.BINANCE_SPOT);
+    const bots = await this.threeCommasManager.loadBotInfo(AccountType.BINANCE_SPOT);
+    console.log('Loaded bots', JSON.stringify(bots.map(b => this.threeCommasManager.remapBot(b))));
 
     await this.checkDeals();
   }
